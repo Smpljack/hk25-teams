@@ -16,13 +16,15 @@ def worldmap(var, **kwargs):
     #projection = ccrs.Robinson(central_longitude=-135.5808361)
     projection = ccrs.Robinson(central_longitude=0)
     fig, ax = plt.subplots(
-        figsize=(8, 4), subplot_kw={"projection": projection}, constrained_layout=True
+        figsize=(8, 4), subplot_kw={"projection": projection}, 
+        constrained_layout=True
     )
     ax.set_global()
 
     hpshow = egh.healpix_show(var, ax=ax, **kwargs)
     cbar = plt.colorbar(hpshow, ax=ax, orientation='vertical', 
                     pad=0.05, shrink=0.8)
+    ax.coastlines()
     return fig, ax
 
 def get_axis_europe():
@@ -92,19 +94,31 @@ def load_coarse_scream_data(
     ds = ds.pipe(egh.attach_coords)
     return ds
 
+def get_quantile(da, q):
+    return xr.apply_ufunc(
+        lambda da, q: np.quantile(da, q, axis=1), da, q,
+                                  input_core_dims =[['cell', 'dayofyear'], []], 
+                                  output_core_dims=[['cell']])
+
+def find_regional_cape_maxima(regional_cape_da, n_cases=10):
+    """Find the n_cases with the highest cape in the regional_cape_da."""
+    return regional_cape_da.sortby(regional_cape_da, ascending=False).isel(case=slice(0, n_cases))
 
 #%%
 if __name__ == "__main__":
-    zoom = 6
+    zoom = 5
     ds = load_native_xsh24_data(zoom=zoom).sel(time='2020')
     daily_max_cape = ds.CAPE_max.groupby('time.dayofyear').max()
-    daily_max_cape_97 = daily_max_cape.quantile(
-        0.97, 'dayofyear')
-    worldmap(daily_max_cape_97)
+    daily_max_cape_97 = get_quantile(daily_max_cape.load(), 0.97)
     #%%
     # Select region
     extent = [-20, 40, 30, 60]  # Europe
     icell, region = get_healpix_region(extent, zoom)
-    daily_max_cape_97_region = daily_max_cape_97.isel(cell=icell) 
-    worldmap(daily_max_cape_97_region)
+    ds_region = ds.isel(cell=icell)
+    regional_cape_maxima = find_regional_cape_maxima(
+        ds_region.CAPE_max.stack(case=['cell', 'time']))
+    #%%
+    fig, ax = worldmap(daily_max_cape_97)
+    ax.scatter(regional_cape_maxima.lon.values, regional_cape_maxima.lat.values, 
+               c=regional_cape_maxima.values, cmap='RdYlBu_r')
     # %%
