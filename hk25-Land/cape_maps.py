@@ -130,7 +130,31 @@ def find_regional_cape_maxima(regional_cape_da, n_cases=10):
     )
     return events_da
 
-#%%
+
+def boxes_around_events(lons, lats, box_km=10):
+    """
+    Create a list of [min_lon, max_lon, min_lat, max_lat] boxes around each (lon, lat) event.
+    Each box is box_km x box_km in size (default 10 km).
+    """
+
+    # Earth's radius in km
+    R = 6371.0
+    half_side = box_km / 2.0
+    
+    boxes = []
+    for lon, lat in zip(lons, lats):
+        # Latitude: 1 deg ≈ 111.32 km
+        dlat = (half_side / 111.32)
+        # Longitude: 1 deg ≈ 111.32 * cos(latitude) km
+        dlon = half_side / (111.32 * np.cos(np.radians(lat)))
+        min_lat = lat - dlat
+        max_lat = lat + dlat
+        min_lon = lon - dlon
+        max_lon = lon + dlon
+        boxes.append([min_lon, max_lon, min_lat, max_lat])
+    return boxes
+
+
 if __name__ == "__main__":
     zoom = 8
     ds = load_native_xsh24_data(zoom=zoom).sel(time=slice('2020-01-01', '2020-12-31'))
