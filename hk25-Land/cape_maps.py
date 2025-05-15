@@ -47,10 +47,11 @@ def plot_extent_box(ax, extent, edgecolor="m", linewidth=2):
     )
 def get_healpix_region(extent, zoom):
 # Compute HEALPix lat/lon coordinates for a given order (zoom level)
+    extent[0] = extent[0] - 360 if (extent[0] > 180) else extent[0]
+    extent[1] = extent[1] - 360 if (extent[1] > 180) else extent[1]
     order = zoom
     nside = hp.order2nside(order)
-    npix = hp.nside2npix(nside)
-
+    npix = hp.nside2npix(nside) 
     hp_lon, hp_lat = hp.pix2ang(
         nside, np.arange(npix), nest=True, lonlat=True)
     hp_lon = (hp_lon + 180) % 360 - 180
