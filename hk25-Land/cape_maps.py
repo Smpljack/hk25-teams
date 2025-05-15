@@ -104,23 +104,32 @@ def get_quantile(da, q):
                                   output_core_dims=[['cell']])
 
 def find_regional_cape_maxima(regional_cape_da, n_cases=20):
-    """Find the top n_cases CAPE maxima on unique days, preserving the full timestamp."""
+    """
+    Find the top n_cases CAPE maxima on unique days, preserving the full timestamp.
+    Much more efficient for dask/xarray.
+    """
+    # Load data into memory (if not already)
+    regional_cape_da = regional_cape_da.load()
     # Flatten over cell and time
     flat = regional_cape_da.stack(event=('cell', 'time'))
+    cape_vals = flat.values
+    cell_vals = flat['cell'].values
+    time_vals = flat['time'].values
+
     # Sort all events by CAPE descending
-    sorted_idx = np.argsort(flat.values)[::-1]
+    sorted_idx = np.argsort(cape_vals)[::-1]
     selected_dates = set()
     top_events = []
     for idx in sorted_idx:
-        cell_idx, time_idx = np.unravel_index(idx, (len(regional_cape_da['cell']), len(regional_cape_da['time'])))
-        time = regional_cape_da['time'].values[time_idx]
+        time = time_vals[idx]
         date_str = str(time)[:10]
         if date_str in selected_dates:
             continue
         selected_dates.add(date_str)
-        lon = regional_cape_da['lon'].isel(cell=cell_idx).compute().item()
-        lat = regional_cape_da['lat'].isel(cell=cell_idx).compute().item()
-        cape = flat.values[idx]
+        cell = cell_vals[idx]
+        lon = regional_cape_da['lon'].sel(cell=cell).item()
+        lat = regional_cape_da['lat'].sel(cell=cell).item()
+        cape = cape_vals[idx]
         top_events.append({
             'lon': lon,
             'lat': lat,
@@ -128,16 +137,9 @@ def find_regional_cape_maxima(regional_cape_da, n_cases=20):
             'date': date_str,
             'timestamp': str(time)
         })
-    events_da = xr.DataArray(
-        data=np.array([e['cape'] for e in top_events]),
-        coords={
-            'lon': ('event', [e['lon'] for e in top_events]),
-            'lat': ('event', [e['lat'] for e in top_events]),
-            'date': ('event', [e['date'] for e in top_events])
-        },
-        dims=['event']
-    )
-    return events_da
+        if len(top_events) >= n_cases:
+            break
+    return top_events
 
 
 def find_regional_cape_maxima2(regional_cape_da, n_cases=10):
