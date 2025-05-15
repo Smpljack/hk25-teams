@@ -131,6 +131,22 @@ def find_regional_cape_maxima(regional_cape_da, n_cases=10):
     return events_da
 
 
+def find_regional_cape_maxima2(regional_cape_da, n_cases=10):
+    """
+        Alternative method to calculate regional cape maxima (which saves
+        info about.
+
+        Note: I've been running this with regional_cape_da loaded into memory.
+    """
+    # For each dayofyear, get location where CAPE maximizes in the region
+    icell_locs = regional_cape_da.argmax('cell')
+
+    # Sort icell_locs by the value of CAPE on that day, save top n_case events
+    events_da = icell_locs.sortby(regional_cape_da.isel(cell=icell_locs),
+                                  ascending=False).isel(dayofyear=np.arange(n_cases))
+    
+    return events_da
+
 def boxes_around_events(lons, lats, box_km=10):
     """
     Create a list of [min_lon, max_lon, min_lat, max_lat] boxes around each (lon, lat) event.
