@@ -2,15 +2,9 @@
 import numpy as np
 import xarray as xr
 import cartopy.crs as ccrs
-import cartopy.feature as cf
 import matplotlib.pyplot as plt
-import dask.array as da
-import numcodecs
 import healpix as hp
-import healpy as hpy
-from healpy.visufunc import projscatter
 import easygems.healpix as egh
-import easygems.remap as egr
 import intake     # For catalogs
 
 
