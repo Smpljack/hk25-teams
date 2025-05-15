@@ -133,7 +133,17 @@ def find_regional_cape_maxima(regional_cape_da, n_cases=20):
         })
         if len(top_events) >= n_cases:
             break
-    return top_events
+    # Convert top_events list of dicts to a DataArray
+    event_data = xr.DataArray(
+        data=[e['cape'] for e in top_events],
+        coords={
+            'lat': ('event', [e['lat'] for e in top_events]),
+            'lon': ('event', [e['lon'] for e in top_events]),
+            'time': ('event', [np.datetime64(e['timestamp']) for e in top_events])
+        },
+        dims=['event']
+    )
+    return event_data
 
 
 def find_regional_cape_maxima2(regional_cape_da, n_cases=10):
