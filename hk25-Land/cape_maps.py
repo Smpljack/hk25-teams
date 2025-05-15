@@ -103,21 +103,30 @@ def get_quantile(da, q):
                                   input_core_dims =[['cell', 'dayofyear'], []], 
                                   output_core_dims=[['cell']])
 
-def find_regional_cape_maxima(regional_cape_da, n_cases=10):
-    """Find the n_cases with the highest cape in the regional_cape_da."""
-    # Group by time and get max cape for each day
-    daily_max = regional_cape_da.resample(time='1D').max().max('cell')
-    sorted_idx = np.argsort(daily_max.values)[-n_cases:][::-1]
-    top_times = daily_max['time'].values[sorted_idx]
+def find_regional_cape_maxima(regional_cape_da, n_cases=20):
+    """Find the top n_cases CAPE maxima on unique days, preserving the full timestamp."""
+    # Flatten over cell and time
+    flat = regional_cape_da.stack(event=('cell', 'time'))
+    # Sort all events by CAPE descending
+    sorted_idx = np.argsort(flat.values)[::-1]
+    selected_dates = set()
     top_events = []
-    for day in top_times:
-        day_data = regional_cape_da.sel(time=day)
-        idx = day_data.argmax('cell').compute().item()
+    for idx in sorted_idx:
+        cell_idx, time_idx = np.unravel_index(idx, (len(regional_cape_da['cell']), len(regional_cape_da['time'])))
+        time = regional_cape_da['time'].values[time_idx]
+        date_str = str(time)[:10]
+        if date_str in selected_dates:
+            continue
+        selected_dates.add(date_str)
+        lon = regional_cape_da['lon'].isel(cell=cell_idx).compute().item()
+        lat = regional_cape_da['lat'].isel(cell=cell_idx).compute().item()
+        cape = flat.values[idx]
         top_events.append({
-            'lon': day_data.lon.isel(cell=idx).compute().item(),
-            'lat': day_data.lat.isel(cell=idx).compute().item(),
-            'cape': day_data.isel(cell=idx).compute().item(),
-            'date': str(day)[:10]
+            'lon': lon,
+            'lat': lat,
+            'cape': cape,
+            'date': date_str,
+            'timestamp': str(time)
         })
     events_da = xr.DataArray(
         data=np.array([e['cape'] for e in top_events]),
@@ -171,6 +180,15 @@ def boxes_around_events(lons, lats, box_km=10):
     return boxes
 
 
+
+#%%
+def maxima_to_arrays(maxima):
+    """Convert list of maxima dicts to arrays for plotting."""
+    lons = [e['lon'] for e in maxima]
+    lats = [e['lat'] for e in maxima]
+    capes = [e['cape'] for e in maxima]
+    return lons, lats, capes
+#%%
 if __name__ == "__main__":
     zoom = 8
     ds = load_native_xsh24_data(zoom=zoom).sel(time=slice('2020-01-01', '2020-12-31'))
@@ -196,6 +214,11 @@ if __name__ == "__main__":
     au_cape_maxima = find_regional_cape_maxima(
         ds_au.CAPE_max,
         n_cases=20)
+    # Convert maxima lists to arrays for plotting
+    sa_lons, sa_lats, sa_capes = maxima_to_arrays(sa_cape_maxima)
+    na_lons, na_lats, na_capes = maxima_to_arrays(na_cape_maxima)
+    au_lons, au_lats, au_capes = maxima_to_arrays(au_cape_maxima)
+
     #%%
     fig, axs = plt.subplots(nrows=2, ncols=2,
         subplot_kw={"projection": ccrs.PlateCarree()},
@@ -205,39 +228,39 @@ if __name__ == "__main__":
     c = egh.healpix_show(daily_max_cape_97, ax=axs[0, 0], cmap='Reds')
     plot_extent_box(axs[0, 0], extent_sa, edgecolor="g", linewidth=2)
     axs[0, 0].scatter(
-        sa_cape_maxima.lon, sa_cape_maxima.lat, 
-        c=sa_cape_maxima, cmap=scatter_cmap, s=10, 
+        sa_lons, sa_lats, 
+        c=sa_capes, cmap=scatter_cmap, s=10, 
         vmin=0, vmax=7000, alpha=0.5)
     plot_extent_box(axs[0, 0], extent_na, edgecolor="c", linewidth=2)
     axs[0, 0].scatter(
-        na_cape_maxima.lon, na_cape_maxima.lat, 
-        c=na_cape_maxima, cmap=scatter_cmap, s=10, 
+        na_lons, na_lats, 
+        c=na_capes, cmap=scatter_cmap, s=10, 
         vmin=0, vmax=7000, alpha=0.5)
     plot_extent_box(axs[0, 0], extent_au, edgecolor="m", linewidth=2)
     s = axs[0, 0].scatter(
-        au_cape_maxima.lon, au_cape_maxima.lat, 
-        c=au_cape_maxima, cmap=scatter_cmap, s=10, 
+        au_lons, au_lats, 
+        c=au_capes, cmap=scatter_cmap, s=10, 
         vmin=0, vmax=7000, alpha=0.5)
     
     axs[0, 1].set_extent(extent_na)
     egh.healpix_show(daily_max_cape_97, ax=axs[0, 1], cmap='Reds')
     axs[0, 1].scatter(
-        na_cape_maxima.lon, na_cape_maxima.lat, 
-        c=na_cape_maxima, cmap=scatter_cmap, s=100, 
+        na_lons, na_lats,
+        c=na_capes, cmap=scatter_cmap, s=100, 
         vmin=0, vmax=7000, alpha=0.5)
     
     axs[1, 0].set_extent(extent_sa)
     egh.healpix_show(daily_max_cape_97, ax=axs[1, 0], cmap='Reds')
     axs[1, 0].scatter(
-        sa_cape_maxima.lon, sa_cape_maxima.lat, 
-        c=sa_cape_maxima, cmap=scatter_cmap, s=100, 
+        sa_lons, sa_lats, 
+        c=sa_capes, cmap=scatter_cmap, s=100, 
         vmin=0, vmax=7000, alpha=0.5)
 
     axs[1, 1].set_extent(extent_au)
     egh.healpix_show(daily_max_cape_97, ax=axs[1, 1], cmap='Reds')
     axs[1, 1].scatter(
-        au_cape_maxima.lon, au_cape_maxima.lat, 
-        c=au_cape_maxima, cmap=scatter_cmap, s=100, 
+        au_lons, au_lats, 
+        c=au_capes, cmap=scatter_cmap, s=100, 
         vmin=0, vmax=7000, alpha=0.5)
     
     # Create two axes for colorbars on the right side
@@ -262,3 +285,15 @@ if __name__ == "__main__":
     #              label='max. daily CAPE [J/kg]')
 
     # %%
+    print("Saudi Arabia CAPE maxima:")
+    for event in sa_cape_maxima:
+        print(f"Date: {event['date']}, Time: {event['timestamp']}, Lon: {event['lon']:.2f}, Lat: {event['lat']:.2f}, CAPE: {event['cape']:.1f}")
+
+    print("North America CAPE maxima:")
+    for event in na_cape_maxima:
+        print(f"Date: {event['date']}, Time: {event['timestamp']}, Lon: {event['lon']:.2f}, Lat: {event['lat']:.2f}, CAPE: {event['cape']:.1f}")
+
+    print("Australia CAPE maxima:")
+    for event in au_cape_maxima:
+        print(f"Date: {event['date']}, Time: {event['timestamp']}, Lon: {event['lon']:.2f}, Lat: {event['lat']:.2f}, CAPE: {event['cape']:.1f}")
+# %%
